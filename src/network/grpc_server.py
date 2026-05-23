@@ -5,11 +5,13 @@ from proto import game_pb2
 from proto import game_pb2_grpc
 
 class GameNodeServicer(game_pb2_grpc.GameNodeServicer):
-    def __init__(self, player_id):
-        self.plaer_id = player_id
+    def __init__(self, player_id, port):
+        self.player_id = player_id
+        self.port = port 
         self.hp = 100
-
         self.hp_lock = asyncio.Lock()
+        self.dht_table = {}
+        self.dht_lock = asyncio.Lock()
 
     async def Attack(self, request, context):
         async with self.hp_lock:
@@ -25,4 +27,56 @@ class GameNodeServicer(game_pb2_grpc.GameNodeServicer):
             status_message=f"Attack towards {self.player_id} successful! Remaining HP: {self.hp}"
         )
     
-    # !!! Falta : receber msg Chat, Find e Store Player e start server
+    async def Chat(self, request, context):
+        print(f"\n[{request.sender_id}]: {request.text}")
+        return game_pb2.ActionResponse(success=True, status_message="Message delivered.")
+
+    async def Move(self, request, context):
+        print(f"\nPlayer {request.player_id} moved to {request.direction}.")
+        return game_pb2.ActionResponse(success=True, status_message="Movement registred.")
+
+    async def StorePlayer(self, request, context):
+        async with self.dht_lock:
+            self.dht_table[request.player_id] = {
+                "ip": request.ip,
+                "port": request.port
+            }
+            print(f"\nStored in local DHT: {request.player_id} -> {request.ip}:{request.port}")
+        return game_pb2.ActionResponse(success=True, status_message="Data stored successfully.")
+
+    async def FindPlayer(self, request, context):
+        target = request.target_player_id
+        
+        async with self.dht_lock:
+            if target == self.player_id:
+                return game_pb2.FindPlayerResponse(found=True, ip="127.0.0.1", port=self.port)
+
+            if target in self.dht_table:
+                return game_pb2.FindPlayerResponse(
+                    found=True,
+                    ip=self.dht_table[target]["ip"],
+                    port=self.dht_table[target]["port"]
+                )
+            
+            closest = []
+            for node_id, info in self.dht_table.items():
+                closest.append(game_pb2.NodeContact(
+                    node_id=node_id,
+                    ip=info["ip"],
+                    port=info["port"]
+                ))
+                if len(closest) >= 3:
+                    break
+                    
+            return game_pb2.FindPlayerResponse(found=False, closest_nodes=closest)
+
+async def start_grpc_server(player_id, port):
+    server = grpc.aio.server()
+    servicer = GameNodeServicer(player_id, port)
+    
+    game_pb2_grpc.add_GameNodeServicer_to_server(servicer, server)
+    server.add_insecure_port(f'0.0.0.0:{port}')
+    
+    await server.start()
+    print(f"gRPC server active on port {port}. P2P network started.")
+    return server, servicer
