@@ -9,6 +9,7 @@ rpc Attack (AttackRequest) returns (ActionResponse);
 rpc Move (MoveRequest) returns (ActionResponse);
 rpc FindPlayer (FindPlayerRequest) returns (FindPlayerResponse);
 rpc StorePlayer (StorePlayerRequest) returns (ActionResponse);
+rpc LeaveNetwork (LeaveRequest) returns (ActionResponse);
 
 }
 message ChatMessage {
@@ -54,4 +55,8 @@ message NodeContact {
     string node_id = 1;
     string ip = 2;
     int32 port = 3;
+}
+
+message LeaveRequest {
+    string player_id = 1;
 }

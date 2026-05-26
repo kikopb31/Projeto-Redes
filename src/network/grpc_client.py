@@ -55,3 +55,11 @@ async def send_find_player(target_ip, target_port, target_player_id):
         except grpc.RpcError as e:
             print(f"Failed to find player for {target_address}: {e.details()}")
             return None
+        
+async def send_leave(target_ip, target_port, player_id):
+    async with grpc.aio.insecure_channel(f"{target_ip}:{target_port}") as channel:
+        stub = game_pb2_grpc.GameNodeStub(channel)
+        try:
+            return await stub.LeaveNetwork(game_pb2.LeaveRequest(player_id=player_id), timeout=5)
+        except grpc.RpcError:
+            return None

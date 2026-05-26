@@ -2,7 +2,7 @@ import asyncio
 import sys
 import aioconsole
 
-from network import grpc_server, grpc_client
+from network import grpc_server, grpc_client, dht
 from ui import console
 
 async def main():
@@ -25,17 +25,27 @@ async def main():
         
         print(f"Registering on bootstrap node {b_ip}:{b_port}...")
         res = await grpc_client.send_store_player(b_ip, b_port, player_id, "127.0.0.1", port)
+
         
         if res and res.success:
             print("Success! Stored on the network.")
-            async with servicer.dht_lock:
-                servicer.dht_table["Initial_Node"] = {"ip": b_ip, "port": b_port}
+        
+        async with servicer.dht_lock:
+            servicer.dht_table[f"Initial_Node"] = {"ip": b_ip, "port": b_port}
+
+        print("Discovering network nodes...")
+        await dht.iterative_find_player(player_id, servicer)
+        async with servicer.dht_lock:
+            print(f"Network discovery complete. {len(servicer.dht_table)} nodes known.")
+
     try:
         await console.start_user_interface(player_id, servicer)
     finally:
-        print("\nShutting down gRPC server...")
+        async with servicer.dht_lock:
+            nodes = list(servicer.dht_table.values())
+        for node in nodes:
+            await grpc_client.send_leave(node["ip"], node["port"], player_id)
         await server.stop(0)
-        print("Terminated.")
 
 if __name__ == "__main__":
     try:

@@ -1,17 +1,27 @@
 import grpc
 import asyncio
 
+import hashlib         
+
 from proto import game_pb2
 from proto import game_pb2_grpc
+
+# função para definir distancia entre nodes
+def xor_distance(id1: str, id2: str) -> int:     
+    h1 = int(hashlib.sha1(id1.encode()).hexdigest(), 16)
+    h2 = int(hashlib.sha1(id2.encode()).hexdigest(), 16)
+    return h1 ^ h2
 
 class GameNodeServicer(game_pb2_grpc.GameNodeServicer):
     def __init__(self, player_id, port):
         self.player_id = player_id
-        self.port = port 
+        self.port = port
         self.hp = 100
         self.hp_lock = asyncio.Lock()
         self.dht_table = {}
         self.dht_lock = asyncio.Lock()
+    
+    
 
     async def Attack(self, request, context):
         async with self.hp_lock:
@@ -33,7 +43,7 @@ class GameNodeServicer(game_pb2_grpc.GameNodeServicer):
             if died:
                 print("\n You have been eliminated! X-X")
                 print("\n You can no longer attack or chat.")
-                
+
         return game_pb2.ActionResponse(
             success = True,
             status_message=f"Attack towards {self.player_id} successful! Remaining HP: {self.hp}"
@@ -70,17 +80,22 @@ class GameNodeServicer(game_pb2_grpc.GameNodeServicer):
                     port=self.dht_table[target]["port"]
                 )
             
-            closest = []
-            for node_id, info in self.dht_table.items():
-                closest.append(game_pb2.NodeContact(
-                    node_id=node_id,
-                    ip=info["ip"],
-                    port=info["port"]
-                ))
-                if len(closest) >= 3:
-                    break
-                    
+            sorted_nodes = sorted(
+                self.dht_table.items(),
+                key=lambda item: xor_distance(item[0], target)
+            )
+            
+            closest = [
+                game_pb2.NodeContact(node_id=nid, ip=info["ip"], port=info["port"])
+                for nid, info in sorted_nodes[:3]
+            ]
             return game_pb2.FindPlayerResponse(found=False, closest_nodes=closest)
+        
+    async def LeaveNetwork(self, request, context):
+        async with self.dht_lock:
+            self.dht_table.pop(request.player_id, None)
+        print(f"\n{request.player_id} left the network.")
+        return game_pb2.ActionResponse(success=True, status_message="Removed from DHT.")
 
 async def start_grpc_server(player_id, port):
     server = grpc.aio.server()

@@ -18,8 +18,12 @@ async def start_user_interface(player_id, servicer):
             continue
 
         if line.startswith("/quit"):
+            async with servicer.dht_lock:
+                nodes = list(servicer.dht_table.values())
+            for node in nodes:
+                await grpc_client.send_leave(node["ip"], node["port"], player_id)
             break
-
+        
         if servicer.hp <= 0:
             print("You are dead! You can no longer perform actions.")
             continue
