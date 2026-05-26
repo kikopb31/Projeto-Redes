@@ -6,7 +6,7 @@ async def start_user_interface(player_id, servicer):
     print("\n--- GAME STARTED ---")
     print("Valid commands:")
     print("  /chat <target_id> <message>")
-    print("  /attack <target_id>")
+    print("  /attack <target_id> <punch|sword|fireball>")
     print("  /dht")
     print("  /quit")
     print("  /respawn")
@@ -14,12 +14,22 @@ async def start_user_interface(player_id, servicer):
     print("---------------------\n")
 
     while True:
-        line = await aioconsole.ainput(f"[{player_id}] > ")
+        line = await aioconsole.ainput(f"[{player_id} | HP:{servicer.hp}] > ")
         line = line.strip()
         if not line:
             continue
 
-        if line.startswith("/quit"):
+        if line.startswith("/help"):
+            print("Valid commands:")
+            print("  /chat <target_id> <message>")
+            print("  /attack <target_id> <punch|sword|fireball>")
+            print("  /dht")
+            print("  /quit")
+            print("  /respawn")
+            print("  /heal")
+            print("---------------------\n")
+
+        elif line.startswith("/quit"):
             async with servicer.dht_lock:
                 nodes = list(servicer.dht_table.values())
             for node in nodes:
@@ -67,31 +77,45 @@ async def start_user_interface(player_id, servicer):
 
         elif line.startswith("/attack"):
             parts = line.split(" ")
-            if len(parts) < 2:
-                print("[ERROR] Usage: /attack <target_id>")
+            if len(parts) < 3:
+                print("[ERROR] Usage: /attack <target_id> <punch|sword|fireball>")
                 continue
-            
             target_id = parts[1]
-            print(f"Locating '{target_id}' to attack...")
+            weapon_choice = parts[2].lower()
+
+            weapons = {
+                "punch":    {"damage": 5,  "chance": 0.90, "name": "Punch"},
+                "sword":    {"damage": 10, "chance": 0.55, "name": "Sword"},
+                "fireball": {"damage": 20, "chance": 0.25, "name": "Fireball"},
+            }
+
+            if weapon_choice not in weapons:
+                print("[ERROR] Unknown weapon. Choose: punch, sword, fireball")
+                continue
+
+            weapon = weapons[weapon_choice]
+
+            import random
+            hit = random.random() < weapon["chance"]
+            if not hit:
+                print(f"You missed with {weapon['name']}!")
+                continue
+
             addr = await dht.iterative_find_player(target_id, servicer)
-            
             if addr:
-                target_ip, target_port = addr
-                print(f"Attacking {target_id} at {target_ip}:{target_port} with Sword...")
-                
-                res = await grpc_client.send_attack(target_ip, target_port, player_id, "Sword", 10)
-                
+                print(f"Attacking {target_id} with {weapon['name']}...")
+                res = await grpc_client.send_attack(addr[0], addr[1], player_id, weapon["name"], weapon["damage"])
                 if res:
                     print(f"[REMOTE RESPONSE] {res.status_message}")
             else:
-                print(f"[ERROR] The attack failed because the player '{target_id}' was not found on the network.")
+                print(f"[ERROR] '{target_id}' not found on the network.")
 
         elif line.startswith("/heal"):
             async with servicer.hp_lock:
-                if servicer.hp == 5:
+                if servicer.hp == 100:
                     print(f"Already at Full HP: {servicer.hp}")
                 else:
                     servicer.hp = min(100, servicer.hp + 5)
-            print(f"Healed! Current HP: {servicer.hp}")
+                    print(f"Healed! Current HP: {servicer.hp}")
         else:
-            print("Invalid command. Try /chat, /attack, /dht or /quit")
+            print("Invalid command. /help")
