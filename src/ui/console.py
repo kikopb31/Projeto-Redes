@@ -9,6 +9,8 @@ async def start_user_interface(player_id, servicer):
     print("  /attack <target_id>")
     print("  /dht")
     print("  /quit")
+    print("  /respawn")
+    print("  /heal")
     print("---------------------\n")
 
     while True:
@@ -23,10 +25,19 @@ async def start_user_interface(player_id, servicer):
             for node in nodes:
                 await grpc_client.send_leave(node["ip"], node["port"], player_id)
             break
+
+        elif line.startswith("/respawn"):
+            if servicer.hp > 0:
+                print("You are still alive! You can only respawn when dead.")
+            else:
+                async with servicer.hp_lock:
+                    servicer.hp = 50
+                print("You have respawned with 50 HP!")
         
-        if servicer.hp <= 0:
+        elif servicer.hp <= 0:
             print("You are dead! You can no longer perform actions.")
             continue
+
 
         elif line.startswith("/dht"):
             
@@ -74,5 +85,13 @@ async def start_user_interface(player_id, servicer):
                     print(f"[REMOTE RESPONSE] {res.status_message}")
             else:
                 print(f"[ERROR] The attack failed because the player '{target_id}' was not found on the network.")
+
+        elif line.startswith("/heal"):
+            async with servicer.hp_lock:
+                if servicer.hp == 5:
+                    print(f"Already at Full HP: {servicer.hp}")
+                else:
+                    servicer.hp = min(100, servicer.hp + 5)
+            print(f"Healed! Current HP: {servicer.hp}")
         else:
             print("Invalid command. Try /chat, /attack, /dht or /quit")
