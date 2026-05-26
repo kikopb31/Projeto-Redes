@@ -16,7 +16,7 @@ async def iterative_find_player(target_id, servicer):
     while nodes_to_ask:
         current_node = nodes_to_ask.pop(0)
         node_key = f"{current_node['ip']}:{current_node['port']}"
-        
+
         if node_key in visited_nodes:
             continue
         visited_nodes.add(node_key)

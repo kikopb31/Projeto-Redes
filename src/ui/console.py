@@ -20,7 +20,12 @@ async def start_user_interface(player_id, servicer):
         if line.startswith("/quit"):
             break
 
+        if servicer.hp <= 0:
+            print("You are dead! You can no longer perform actions.")
+            continue
+
         elif line.startswith("/dht"):
+            
             async with servicer.dht_lock:
                 print(f"\n--- LOCAL DHT TABLE ({len(servicer.dht_table)} nodes) ---")
                 for k, v in servicer.dht_table.items():
@@ -28,6 +33,7 @@ async def start_user_interface(player_id, servicer):
                 print("-----------------------------------------\n")
 
         elif line.startswith("/chat"):
+            
             parts = line.split(" ", maxsplit=2)
             if len(parts) < 3:
                 print("[ERROR] Usage: /chat <target_id> <message>")

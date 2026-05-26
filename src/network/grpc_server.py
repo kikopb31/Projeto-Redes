@@ -15,13 +15,25 @@ class GameNodeServicer(game_pb2_grpc.GameNodeServicer):
 
     async def Attack(self, request, context):
         async with self.hp_lock:
-            self.hp -= request.damage
+
+            if self.hp <= 0: # evita que um jogador morto possa ser atacado, ja esta morto
+                return game_pb2.ActionResponse(
+                    success=False,
+                    status_message=f"{self.player_id} is already dead!"
+                )
+
+
+            self.hp = max(0, self.hp - request.damage) #evitar underflow de vida
 
             print(f"\n OUCH!!! You have been attacked by {request.attacker_id} with {request.weapon}! {request.damage} damage points taken!")
             print(f"Current HP : {self.hp}")
 
-            if self.hp <= 0:
+            died = self.hp == 0;
+
+            if died:
                 print("\n You have been eliminated! X-X")
+                print("\n You can no longer attack or chat.")
+                
         return game_pb2.ActionResponse(
             success = True,
             status_message=f"Attack towards {self.player_id} successful! Remaining HP: {self.hp}"
