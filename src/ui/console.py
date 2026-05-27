@@ -1,9 +1,11 @@
+import random
 import aioconsole
 from network import grpc_client
 from network import dht
 
 async def start_user_interface(player_id, servicer):
     print("\n--- GAME STARTED ---")
+    print(f"Lobby Address: 127.0.0.1:{servicer.port}")
     print("Valid commands:")
     print("  /chat <target_id> <message>")
     print("  /attack <target_id> <punch|sword|fireball>")
@@ -20,6 +22,7 @@ async def start_user_interface(player_id, servicer):
             continue
 
         if line.startswith("/help"):
+            print(f"\nLobby Address: 127.0.0.1:{servicer.port}")
             print("Valid commands:")
             print("  /chat <target_id> <message>")
             print("  /attack <target_id> <punch|sword|fireball>")
@@ -30,10 +33,6 @@ async def start_user_interface(player_id, servicer):
             print("---------------------\n")
 
         elif line.startswith("/quit"):
-            async with servicer.dht_lock:
-                nodes = list(servicer.dht_table.values())
-            for node in nodes:
-                await grpc_client.send_leave(node["ip"], node["port"], player_id)
             break
 
         elif line.startswith("/respawn"):
@@ -95,7 +94,6 @@ async def start_user_interface(player_id, servicer):
 
             weapon = weapons[weapon_choice]
 
-            import random
             hit = random.random() < weapon["chance"]
             if not hit:
                 print(f"You missed with {weapon['name']}!")

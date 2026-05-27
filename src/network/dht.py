@@ -26,7 +26,7 @@ async def iterative_find_player(target_id, servicer):
         
         if response:
             if response.found:
-                servicer.dht_table.pop("placeholder", None)
+
                 print(f"Success! '{target_id}' was found at {response.ip}:{response.port}")
 
                 if target_id != servicer.player_id: # evitar que nos guardamos nos proprios na dht

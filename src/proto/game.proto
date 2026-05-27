@@ -6,7 +6,6 @@ service GameNode {
 
 rpc Chat (ChatMessage) returns (ActionResponse);
 rpc Attack (AttackRequest) returns (ActionResponse);
-rpc Move (MoveRequest) returns (ActionResponse);
 rpc FindPlayer (FindPlayerRequest) returns (FindPlayerResponse);
 rpc StorePlayer (StorePlayerRequest) returns (ActionResponse);
 rpc LeaveNetwork (LeaveRequest) returns (ActionResponse);
@@ -23,10 +22,7 @@ message AttackRequest {
     int32 damage = 3;
 }
 
-message MoveRequest {
-    string player_id = 1;
-    string direction = 2;
-}
+
 
 message ActionResponse {
     bool success = 1;

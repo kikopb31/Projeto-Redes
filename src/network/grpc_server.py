@@ -38,7 +38,7 @@ class GameNodeServicer(game_pb2_grpc.GameNodeServicer):
             print(f"\n OUCH!!! You have been attacked by {request.attacker_id} with {request.weapon}! {request.damage} damage points taken!")
             print(f"Current HP : {self.hp}")
 
-            died = self.hp == 0;
+            died = self.hp == 0
 
             if died:
                 print("\n You have been eliminated! X-X")
@@ -53,9 +53,7 @@ class GameNodeServicer(game_pb2_grpc.GameNodeServicer):
         print(f"\n[{request.sender_id}]: {request.text}")
         return game_pb2.ActionResponse(success=True, status_message="Message delivered.")
 
-    async def Move(self, request, context):
-        print(f"\nPlayer {request.player_id} moved to {request.direction}.")
-        return game_pb2.ActionResponse(success=True, status_message="Movement registred.")
+
 
     async def StorePlayer(self, request, context):
         async with self.dht_lock:
@@ -102,8 +100,13 @@ async def start_grpc_server(player_id, port):
     servicer = GameNodeServicer(player_id, port)
     
     game_pb2_grpc.add_GameNodeServicer_to_server(servicer, server)
-    server.add_insecure_port(f'0.0.0.0:{port}')
+    actual_port = server.add_insecure_port(f'0.0.0.0:{port}')
+    
+    if actual_port == 0:
+        raise RuntimeError(f"Port {port} is already in use or unavailable.")
+        
+    servicer.port = actual_port
     
     await server.start()
-    print(f"gRPC server active on port {port}. P2P network started.")
-    return server, servicer
+    print(f"gRPC server active on port {actual_port}. P2P network started.")
+    return server, servicer, actual_port
