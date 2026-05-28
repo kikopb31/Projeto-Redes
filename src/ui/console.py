@@ -5,7 +5,6 @@ from network import dht
 
 async def start_user_interface(player_id, servicer):
     print("\n--- GAME STARTED ---")
-    print(f"Lobby Address: 127.0.0.1:{servicer.port}")
     print("Valid commands:")
     print("  /chat <target_id> <message>")
     print("  /attack <target_id> <punch|sword|fireball>")
@@ -22,7 +21,6 @@ async def start_user_interface(player_id, servicer):
             continue
 
         if line.startswith("/help"):
-            print(f"\nLobby Address: 127.0.0.1:{servicer.port}")
             print("Valid commands:")
             print("  /chat <target_id> <message>")
             print("  /attack <target_id> <punch|sword|fireball>")

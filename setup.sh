@@ -18,7 +18,7 @@ venv/bin/python3 -m grpc_tools.protoc \
     ./src/proto/game.proto
 
 echo "A corrigir imports do proto..."
-sed -i 's/^import game_pb2/from proto import game_pb2/' src/proto/game_pb2_grpc.py
+sed -i '' 's/^import game_pb2/from proto import game_pb2/' src/proto/game_pb2_grpc.py
 
 echo ""
 echo "Setup completo!"

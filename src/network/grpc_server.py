@@ -100,13 +100,8 @@ async def start_grpc_server(player_id, port):
     servicer = GameNodeServicer(player_id, port)
     
     game_pb2_grpc.add_GameNodeServicer_to_server(servicer, server)
-    actual_port = server.add_insecure_port(f'0.0.0.0:{port}')
-    
-    if actual_port == 0:
-        raise RuntimeError(f"Port {port} is already in use or unavailable.")
-        
-    servicer.port = actual_port
+    server.add_insecure_port(f'0.0.0.0:{port}')
     
     await server.start()
-    print(f"gRPC server active on port {actual_port}. P2P network started.")
-    return server, servicer, actual_port
+    print(f"gRPC server active on port {port}. P2P network started.")
+    return server, servicer
