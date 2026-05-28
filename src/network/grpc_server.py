@@ -1,6 +1,5 @@
 import grpc
 import asyncio
-
 import hashlib         
 
 from proto import game_pb2
@@ -13,15 +12,29 @@ def xor_distance(id1: str, id2: str) -> int:
     return h1 ^ h2
 
 class GameNodeServicer(game_pb2_grpc.GameNodeServicer):
-    def __init__(self, player_id, port):
+    def __init__(self, player_id, port, my_ip):
         self.player_id = player_id
         self.port = port
+        self.my_ip = my_ip  
         self.hp = 100
         self.hp_lock = asyncio.Lock()
         self.dht_table = {}
         self.dht_lock = asyncio.Lock()
     
-    
+    # Função para update da tabela para novos players
+    async def _update_dht_from_context(self, sender_id, context):
+        peer_string = context.peer()
+        if sender_id == self.player_id:
+            return
+        try:
+            parts = peer_string.split(':')
+            if len(parts) >= 2:
+                sender_ip = parts[1].strip()
+                async with self.dht_lock:
+                    if sender_id not in self.dht_table:
+                        pass
+        except Exception:
+            pass
 
     async def Attack(self, request, context):
         async with self.hp_lock:
@@ -31,7 +44,6 @@ class GameNodeServicer(game_pb2_grpc.GameNodeServicer):
                     success=False,
                     status_message=f"{self.player_id} is already dead!"
                 )
-
 
             self.hp = max(0, self.hp - request.damage) #evitar underflow de vida
 
@@ -45,15 +57,13 @@ class GameNodeServicer(game_pb2_grpc.GameNodeServicer):
                 print("\n You can no longer attack or chat.")
 
         return game_pb2.ActionResponse(
-            success = True,
+            success=True,
             status_message=f"Attack towards {self.player_id} successful! Remaining HP: {self.hp}"
         )
     
     async def Chat(self, request, context):
-        print(f"\n[{request.sender_id}]: {request.text}")
+        print(f"\n[{request.sender_id}]: {request.text}", flush=True)
         return game_pb2.ActionResponse(success=True, status_message="Message delivered.")
-
-
 
     async def StorePlayer(self, request, context):
         async with self.dht_lock:
@@ -61,15 +71,16 @@ class GameNodeServicer(game_pb2_grpc.GameNodeServicer):
                 "ip": request.ip,
                 "port": request.port
             }
-            print(f"\nStored in local DHT: {request.player_id} -> {request.ip}:{request.port}")
+            print(f"\n[DHT] Stored in local DHT: {request.player_id} -> {request.ip}:{request.port}")
         return game_pb2.ActionResponse(success=True, status_message="Data stored successfully.")
 
     async def FindPlayer(self, request, context):
         target = request.target_player_id
         
         async with self.dht_lock:
+
             if target == self.player_id:
-                return game_pb2.FindPlayerResponse(found=True, ip="127.0.0.1", port=self.port)
+                return game_pb2.FindPlayerResponse(found=True, ip=self.my_ip, port=self.port)
 
             if target in self.dht_table:
                 return game_pb2.FindPlayerResponse(
@@ -95,11 +106,12 @@ class GameNodeServicer(game_pb2_grpc.GameNodeServicer):
         print(f"\n{request.player_id} left the network.")
         return game_pb2.ActionResponse(success=True, status_message="Removed from DHT.")
 
-async def start_grpc_server(player_id, port):
+async def start_grpc_server(player_id, port, my_ip):
     server = grpc.aio.server()
-    servicer = GameNodeServicer(player_id, port)
+    servicer = GameNodeServicer(player_id, port, my_ip)
     
     game_pb2_grpc.add_GameNodeServicer_to_server(servicer, server)
+
     server.add_insecure_port(f'0.0.0.0:{port}')
     
     await server.start()

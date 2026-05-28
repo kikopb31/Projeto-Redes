@@ -10,6 +10,9 @@ async def main():
     
     player_id = await aioconsole.ainput("Enter your Player ID: ")
     player_id = player_id.strip()
+
+    my_ip = await aioconsole.ainput("Enter your current IP (local 127.0.0.1): ")
+    my_ip = my_ip.strip()
     
     try:
         port_str = await aioconsole.ainput("Enter your gRPC port: ")
@@ -17,15 +20,14 @@ async def main():
     except ValueError:
         print("[ERROR] Invalid port.")
         return
-    server, servicer = await grpc_server.start_grpc_server(player_id, port)
+    server, servicer = await grpc_server.start_grpc_server(player_id, port, my_ip)
     bootstrap = await aioconsole.ainput("\nDo you want to connect to a known node? (y/n): ")
     if bootstrap.strip().lower() == 'y':
         b_ip = await aioconsole.ainput("Known node IP: ")
         b_port = int(await aioconsole.ainput("Known node port: "))
         
         print(f"Registering on bootstrap node {b_ip}:{b_port}...")
-        res = await grpc_client.send_store_player(b_ip, b_port, player_id, "127.0.0.1", port)
-
+        res = await grpc_client.send_store_player(b_ip, b_port, player_id, my_ip, port)
         
         if res and res.success:
             print("Success! Stored on the network.")
