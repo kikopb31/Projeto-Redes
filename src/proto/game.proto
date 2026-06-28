@@ -1,0 +1,82 @@
+syntax = "proto3";
+
+package proto;
+
+service GameNode {
+
+rpc Chat (ChatMessage) returns (ActionResponse);
+rpc Attack (AttackRequest) returns (ActionResponse);
+rpc FindPlayer (FindPlayerRequest) returns (FindPlayerResponse);
+rpc StorePlayer (StorePlayerRequest) returns (ActionResponse);
+rpc LeaveNetwork (LeaveRequest) returns (ActionResponse);
+rpc JoinNetwork (JoinRequest) returns (JoinResponse);
+rpc Ping (PingRequest) returns (PingResponse);
+
+
+}
+message ChatMessage {
+    string sender_id = 1;
+    string text = 2;
+}
+
+message AttackRequest {
+    string attacker_id = 1;
+    string weapon = 2;
+    int32 damage = 3;
+}
+
+
+
+message ActionResponse {
+    bool success = 1;
+    string status_message = 2;
+}
+
+message FindPlayerRequest {
+    string target_player_id = 1;
+}
+
+message FindPlayerResponse {
+    bool found = 1;
+    string ip = 2;
+    int32 port = 3;
+
+    repeated NodeContact closest_nodes = 4;
+}
+
+message StorePlayerRequest {
+    string player_id = 1;
+    string ip = 2;
+    int32 port = 3;
+}
+
+message NodeContact {
+    string node_id = 1;
+    string ip = 2;
+    int32 port = 3;
+}
+
+message LeaveRequest {
+    string player_id = 1;
+}
+
+message JoinRequest {
+    string player_id = 1;
+    string ip = 2;
+    int32 port = 3;
+}
+
+message JoinResponse {
+    bool success = 1;
+    string status_message = 2;
+    string host_id = 3;
+    repeated NodeContact all_nodes = 4;
+}
+
+message PingRequest {
+    string sender_id = 1;
+}
+
+message PingResponse {
+    bool success = 1;
+}
