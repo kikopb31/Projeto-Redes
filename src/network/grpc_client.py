@@ -65,3 +65,36 @@ async def send_leave(target_ip, target_port, player_id):
             return await stub.LeaveNetwork(game_pb2.LeaveRequest(player_id=player_id), timeout=5)
         except grpc.RpcError:
             return None
+        
+
+async def send_join_network(target_ip, target_port, player_id, my_ip, my_port):
+    target_address = f"{target_ip}:{target_port}"
+    async with grpc.aio.insecure_channel(target_address) as channel:
+        stub = game_pb2_grpc.GameNodeStub(channel)
+        request = game_pb2.JoinRequest(
+            player_id=player_id,
+            ip=my_ip,
+            port=my_port
+        )
+        try:
+            response = await stub.JoinNetwork(request, timeout=5)
+            return response
+        except grpc.RpcError as e:
+            print(f"Failed to join lobby at {target_address}: {e.details()}")
+            return None
+
+
+async def send_ping(target_ip, target_port, sender_id):
+    target_adress = f"{target_ip}:{target_port}"
+
+    async with grpc.aio.insecure_channel(target_adress) as channel:
+        stub = game_pb2_grpc.GameNodeStub(channel)
+        request = game_pb2.PingRequest(sender_id=sender_id)
+        try:
+            response = await stub.Ping(request, timeout =2)
+            return response
+        except grpc.RpcError:
+            return None
+        except Exception as e:
+            print(f"[DEBUG] Internal Error in Ping:{e}")
+            return None

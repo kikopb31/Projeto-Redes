@@ -9,6 +9,9 @@ rpc Attack (AttackRequest) returns (ActionResponse);
 rpc FindPlayer (FindPlayerRequest) returns (FindPlayerResponse);
 rpc StorePlayer (StorePlayerRequest) returns (ActionResponse);
 rpc LeaveNetwork (LeaveRequest) returns (ActionResponse);
+rpc JoinNetwork (JoinRequest) returns (JoinResponse);
+rpc Ping (PingRequest) returns (PingResponse);
+
 
 }
 message ChatMessage {
@@ -55,4 +58,25 @@ message NodeContact {
 
 message LeaveRequest {
     string player_id = 1;
+}
+
+message JoinRequest {
+    string player_id = 1;
+    string ip = 2;
+    int32 port = 3;
+}
+
+message JoinResponse {
+    bool success = 1;
+    string status_message = 2;
+    string host_id = 3;
+    repeated NodeContact all_nodes = 4;
+}
+
+message PingRequest {
+    string sender_id = 1;
+}
+
+message PingResponse {
+    bool success = 1;
 }
