@@ -11,6 +11,8 @@ rpc StorePlayer (StorePlayerRequest) returns (ActionResponse);
 rpc LeaveNetwork (LeaveRequest) returns (ActionResponse);
 rpc JoinNetwork (JoinRequest) returns (JoinResponse);
 rpc Ping (PingRequest) returns (PingResponse);
+rpc HostDisconnected (HostDisconnectRequest) returns (ActionResponse);
+rpc PromoteToHost (PromoteToHostRequest) returns (ActionResponse);
 
 
 }
@@ -79,4 +81,18 @@ message PingRequest {
 
 message PingResponse {
     bool success = 1;
+}
+
+message HostDisconnectRequest {
+    string old_host_id = 1;
+    string new_host_id = 2;
+    string new_host_ip = 3;
+    int32 new_host_port = 4;
+    repeated NodeContact all_nodes = 5;
+}
+
+message PromoteToHostRequest {
+    string new_host_id = 1;
+    string new_host_ip = 2;
+    int32 new_host_port = 3;
 }

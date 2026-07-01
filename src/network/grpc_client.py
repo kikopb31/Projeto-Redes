@@ -85,16 +85,58 @@ async def send_join_network(target_ip, target_port, player_id, my_ip, my_port):
 
 
 async def send_ping(target_ip, target_port, sender_id):
-    target_adress = f"{target_ip}:{target_port}"
+    target_address = f"{target_ip}:{target_port}"
 
-    async with grpc.aio.insecure_channel(target_adress) as channel:
+    async with grpc.aio.insecure_channel(target_address) as channel:
         stub = game_pb2_grpc.GameNodeStub(channel)
         request = game_pb2.PingRequest(sender_id=sender_id)
         try:
-            response = await stub.Ping(request, timeout =2)
+            response = await stub.Ping(request, timeout=2)
             return response
         except grpc.RpcError:
             return None
         except Exception as e:
-            print(f"[DEBUG] Internal Error in Ping:{e}")
+            return None
+
+async def send_host_disconnected(target_ip, target_port, old_host_id, new_host_id, new_host_ip, new_host_port, all_nodes):
+    target_address = f"{target_ip}:{target_port}"
+    
+    async with grpc.aio.insecure_channel(target_address) as channel:
+        stub = game_pb2_grpc.GameNodeStub(channel)
+        
+        node_contacts = [
+            game_pb2.NodeContact(node_id=nid, ip=info["ip"], port=info["port"])
+            for nid, info in all_nodes.items()
+        ]
+        
+        request = game_pb2.HostDisconnectRequest(
+            old_host_id=old_host_id,
+            new_host_id=new_host_id,
+            new_host_ip=new_host_ip,
+            new_host_port=new_host_port,
+            all_nodes=node_contacts
+        )
+        
+        try:
+            response = await stub.HostDisconnected(request, timeout=5)
+            return response
+        except grpc.RpcError:
+            return None
+
+async def send_promote_to_host(target_ip, target_port, new_host_id, new_host_ip, new_host_port):
+    target_address = f"{target_ip}:{target_port}"
+    
+    async with grpc.aio.insecure_channel(target_address) as channel:
+        stub = game_pb2_grpc.GameNodeStub(channel)
+        
+        request = game_pb2.PromoteToHostRequest(
+            new_host_id=new_host_id,
+            new_host_ip=new_host_ip,
+            new_host_port=new_host_port
+        )
+        
+        try:
+            response = await stub.PromoteToHost(request, timeout=5)
+            return response
+        except grpc.RpcError:
             return None
