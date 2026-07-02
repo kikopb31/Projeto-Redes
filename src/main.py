@@ -101,7 +101,12 @@ async def main():
             dht_items = list(servicer.dht_table.items())
         
         if is_host and len(dht_items) > 0:
-            next_host_id, next_host_info = dht_items[0] 
+            if len(servicer.lobby_nodes) > 1:
+                next_host_id = servicer.lobby_nodes[1]
+            else:
+                next_host_id = dht_items[0][0]
+                
+            next_host_info = servicer.dht_table[next_host_id]
 
             await grpc_client.send_promote_to_host(
                 next_host_info["ip"],
@@ -111,18 +116,19 @@ async def main():
                 next_host_info["port"]
             )
             
-            for nid, ninfo in dht_items[1:]:
-                asyncio.create_task(
-                    grpc_client.send_host_disconnected(
-                        ninfo["ip"],
-                        ninfo["port"],
-                        player_id,
-                        next_host_id,
-                        next_host_info["ip"],
-                        next_host_info["port"],
-                        {k: v for k, v in servicer.dht_table.items() if k != player_id}
+            for nid, ninfo in dht_items:
+                if nid != next_host_id:
+                    asyncio.create_task(
+                        grpc_client.send_host_disconnected(
+                            ninfo["ip"],
+                            ninfo["port"],
+                            player_id,
+                            next_host_id,
+                            next_host_info["ip"],
+                            next_host_info["port"],
+                            {k: v for k, v in servicer.dht_table.items() if k != player_id}
+                        )
                     )
-                )
         else:
             for nid, ninfo in dht_items:
                 try:

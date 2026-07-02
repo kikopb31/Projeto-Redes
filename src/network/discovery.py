@@ -41,7 +41,6 @@ async def discover_lobbies(timeout=2.0):
     return lobbies
 
 async def run_discovery_server(player_id, grpc_port):
-    """Fica à escuta em background para responder a quem procurar lobbies."""
     loop = asyncio.get_running_loop()
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
