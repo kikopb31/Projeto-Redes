@@ -20,21 +20,15 @@ def get_local_ip(target_ip="8.8.8.8", target_port=53):
 
 async def main():
     print("=== MULTIPLAYER TEXTUAL P2P ===")
-    
-    # 1. Pede o player_id
     player_id = await aioconsole.ainput("Enter your Player ID: ")
     player_id = player_id.strip()
-    
     my_ip = get_local_ip()
-    
-    # 2. Inicia o servidor e adquire a porta automaticamente
+
     server, servicer, my_port = await grpc_server.start_grpc_server(player_id, my_ip)
-    
-    # 3. Procura Lobbies na Rede Local 
+
     print("\nScanning local network for available lobbies...")
     lobbies = await discovery.discover_lobbies()
 
-    # 4. Apresenta o Menu de Lobbies
     if lobbies:
         print("\nAvailable Lobbies:")
         for i, lobby in enumerate(lobbies):
@@ -55,9 +49,7 @@ async def main():
     discovery_task = None
     is_host = False 
 
-    # 5. Lógica baseada na escolha
     if lobbies and 0 <= choice_idx < len(lobbies):
-        # JOIN LOBBY (Jogador Cliente)
         host = lobbies[choice_idx]
         print(f"\nRequesting access to {host['player_id']}'s lobby...")
         
@@ -67,12 +59,18 @@ async def main():
             print("Access granted! Downloading DHT table from host...")
             
             async with servicer.dht_lock:
-                # Guarda o Host
+                servicer.host_id = res.host_id
+                servicer.host_ip = host['ip']
+                servicer.host_port = host['port']         
                 servicer.dht_table[res.host_id] = {"ip": host['ip'], "port": host['port']}
-                
-                # Guarda os restantes jogadores enviados pelo Host
+
+                servicer.lobby_nodes = [res.host_id]
+
                 for node in res.all_nodes:
                     servicer.dht_table[node.node_id] = {"ip": node.ip, "port": node.port}
+                    servicer.lobby_nodes.append(node.node_id)
+                
+                servicer.lobby_nodes.append(player_id)
             
             print(f"Network discovery complete. {len(servicer.dht_table)} nodes known.")
         else:
@@ -81,16 +79,16 @@ async def main():
             return
 
     else:
-        # HOST LOBBY (Jogador Criador/Host)
         print("\nCreating new lobby. You are the Host of this network.")
-        is_host = True  # Ativa a flag apenas para o Host
+        is_host = True
+        servicer.is_host = True
+        servicer.host_id = player_id
 
-    # 6. ALTERAÇÃO CRÍTICA: Apenas o Host anuncia o lobby na LAN
     if is_host:
         discovery_task = asyncio.create_task(discovery.run_discovery_server(player_id, my_port))
 
     heartbeat_task = asyncio.create_task(grpc_server.monitor_heartbeats(servicer))
-    # 7. Iniciar Interface
+    
     try:
         await console.start_user_interface(player_id, servicer)
     finally:
@@ -98,10 +96,46 @@ async def main():
             discovery_task.cancel()
         if heartbeat_task:
             heartbeat_task.cancel()
+        
         async with servicer.dht_lock:
-            nodes = list(servicer.dht_table.values())
-        for node in nodes:
-            await grpc_client.send_leave(node["ip"], node["port"], player_id)
+            dht_items = list(servicer.dht_table.items())
+        
+        if is_host and len(dht_items) > 0:
+            if len(servicer.lobby_nodes) > 1:
+                next_host_id = servicer.lobby_nodes[1]
+            else:
+                next_host_id = dht_items[0][0]
+                
+            next_host_info = servicer.dht_table[next_host_id]
+
+            await grpc_client.send_promote_to_host(
+                next_host_info["ip"],
+                next_host_info["port"],
+                next_host_id,  
+                next_host_info["ip"],
+                next_host_info["port"]
+            )
+            
+            for nid, ninfo in dht_items:
+                if nid != next_host_id:
+                    asyncio.create_task(
+                        grpc_client.send_host_disconnected(
+                            ninfo["ip"],
+                            ninfo["port"],
+                            player_id,
+                            next_host_id,
+                            next_host_info["ip"],
+                            next_host_info["port"],
+                            {k: v for k, v in servicer.dht_table.items() if k != player_id}
+                        )
+                    )
+        else:
+            for nid, ninfo in dht_items:
+                try:
+                    await grpc_client.send_leave(ninfo["ip"], ninfo["port"], player_id)
+                except Exception:
+                    pass
+        
         await server.stop(0)
 
 if __name__ == "__main__":

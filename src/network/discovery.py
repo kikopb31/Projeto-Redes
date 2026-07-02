@@ -6,7 +6,6 @@ import json
 BROADCAST_PORT = 9999
 
 async def discover_lobbies(timeout=2.0):
-    """Envia um broadcast UDP e escuta por respostas de Lobbies."""
     loop = asyncio.get_running_loop()
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -14,7 +13,6 @@ async def discover_lobbies(timeout=2.0):
     sock.bind(('', 0)) 
     sock.setblocking(False)
 
-    # Broadcast
     msg = b"DISCOVER_LOBBIES"
     await loop.sock_sendto(sock, msg, ('255.255.255.255', BROADCAST_PORT))
 
@@ -41,7 +39,6 @@ async def discover_lobbies(timeout=2.0):
     return lobbies
 
 async def run_discovery_server(player_id, grpc_port):
-    """Fica à escuta em background para responder a quem procurar lobbies."""
     loop = asyncio.get_running_loop()
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)

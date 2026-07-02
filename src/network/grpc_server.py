@@ -22,10 +22,15 @@ class GameNodeServicer(game_pb2_grpc.GameNodeServicer):
         self.dht_lock = asyncio.Lock()
         self.missed_pings = {}
         self.missed_pings_lock = asyncio.Lock()
+        self.is_host = False
+        self.host_id = None
+        self.host_ip = None
+        self.host_port = None
+        self.lobby_nodes = [player_id] 
 
     async def Ping(self, request, context):
-        return game_pb2.PingResponse(success = True)
-    
+        return game_pb2.PingResponse(success=True)
+        
     async def remove_dead_node(self, node_id):
         async with self.dht_lock:
             if node_id in self.dht_table:
@@ -34,32 +39,9 @@ class GameNodeServicer(game_pb2_grpc.GameNodeServicer):
         async with self.missed_pings_lock:
             if node_id in self.missed_pings:
                 del self.missed_pings[node_id]
-    
-    async def Attack(self, request, context):
-        async with self.hp_lock:
-            if self.hp <= 0:
-                return game_pb2.ActionResponse(
-                    success=False,
-                    status_message=f"{self.player_id} is already dead!"
-                )
-
-            self.hp = max(0, self.hp - request.damage)
-
-            print(f"\n OUCH!!! You have been attacked by {request.attacker_id} with {request.weapon}! {request.damage} damage points taken!")
-            print(f"Current HP : {self.hp}")
-
-            if self.hp == 0:
-                print("\n You have been eliminated! X-X")
-                print("\n You can no longer attack or chat.")
-
-        return game_pb2.ActionResponse(
-            success=True,
-            status_message=f"Attack towards {self.player_id} successful! Remaining HP: {self.hp}"
-        )
-    
-    async def Chat(self, request, context):
-        print(f"\n[{request.sender_id}]: {request.text}", flush=True)
-        return game_pb2.ActionResponse(success=True, status_message="Message delivered.")
+                
+        if hasattr(self, 'lobby_nodes') and node_id in self.lobby_nodes:
+            self.lobby_nodes.remove(node_id)
 
     async def StorePlayer(self, request, context):
         async with self.dht_lock:
@@ -67,46 +49,18 @@ class GameNodeServicer(game_pb2_grpc.GameNodeServicer):
                 "ip": request.ip,
                 "port": request.port
             }
+            if request.player_id not in self.lobby_nodes:
+                self.lobby_nodes.append(request.player_id)
             print(f"\n[DHT] Stored in local DHT: {request.player_id} -> {request.ip}:{request.port}")
         return game_pb2.ActionResponse(success=True, status_message="Data stored successfully.")
-
-    async def FindPlayer(self, request, context):
-        target = request.target_player_id
         
-        async with self.dht_lock:
-            if target == self.player_id:
-                return game_pb2.FindPlayerResponse(found=True, ip=self.my_ip, port=self.port)
-
-            if target in self.dht_table:
-                return game_pb2.FindPlayerResponse(
-                    found=True,
-                    ip=self.dht_table[target]["ip"],
-                    port=self.dht_table[target]["port"]
-                )
-            
-            sorted_nodes = sorted(
-                self.dht_table.items(),
-                key=lambda item: xor_distance(item[0], target)
-            )
-            
-            closest = [
-                game_pb2.NodeContact(node_id=nid, ip=info["ip"], port=info["port"])
-                for nid, info in sorted_nodes[:3]
-            ]
-            return game_pb2.FindPlayerResponse(found=False, closest_nodes=closest)
-        
-    async def LeaveNetwork(self, request, context):
-        async with self.dht_lock:
-            self.dht_table.pop(request.player_id, None)
-        print(f"\n{request.player_id} left the network.")
-        return game_pb2.ActionResponse(success=True, status_message="Removed from DHT.")
-
     async def JoinNetwork(self, request, context):
         from network import grpc_client 
 
         async with self.dht_lock:
             current_nodes = []
             existing_nodes = list(self.dht_table.values()) 
+            
             for nid, info in self.dht_table.items():
                 current_nodes.append(
                     game_pb2.NodeContact(node_id=nid, ip=info["ip"], port=info["port"])
@@ -116,6 +70,10 @@ class GameNodeServicer(game_pb2_grpc.GameNodeServicer):
                 "ip": request.ip,
                 "port": request.port
             }
+            
+            if request.player_id not in self.lobby_nodes:
+                self.lobby_nodes.append(request.player_id)
+                
             print(f"\n[HOST] Player '{request.player_id}' joined the lobby! Added to DHT.")
 
         for node in existing_nodes:
@@ -136,44 +94,170 @@ class GameNodeServicer(game_pb2_grpc.GameNodeServicer):
             all_nodes=current_nodes
         )
 
+    async def LeaveNetwork(self, request, context):
+        await self.remove_dead_node(request.player_id)
+        print(f"\n[NETWORK] Player '{request.player_id}' disconnected.", flush=True)
+        return game_pb2.ActionResponse(success=True, status_message="Removed from DHT.")
 
+    async def HostDisconnected(self, request, context):
+        if request.old_host_id in self.lobby_nodes or request.old_host_id in self.dht_table:
+            print(f"\n[NETWORK] Host '{request.old_host_id}' disconnected!", flush=True)
+            await self.remove_dead_node(request.old_host_id)
+        
+        async with self.dht_lock:
+            self.host_id = request.new_host_id
+            self.host_ip = request.new_host_ip
+            self.host_port = request.new_host_port           
+            self.dht_table[request.new_host_id] = {
+                "ip": request.new_host_ip,
+                "port": request.new_host_port
+            }
+            
+            self.lobby_nodes = [request.new_host_id]
+            
+            for node in request.all_nodes:
+                if node.node_id != self.player_id:
+                    self.dht_table[node.node_id] = {"ip": node.ip, "port": node.port}
+                if node.node_id not in self.lobby_nodes:
+                    self.lobby_nodes.append(node.node_id)
+            
+            if self.player_id not in self.lobby_nodes:
+                self.lobby_nodes.append(self.player_id)
+        
+        print(f"\n[NETWORK] New host: '{request.new_host_id}'", flush=True)
+        return game_pb2.ActionResponse(success=True, status_message="Host changed.")
+    
+    async def PromoteToHost(self, request, context):
+        old_host = self.host_id
+        
+        if old_host and old_host != self.player_id:
+            print(f"\n[NETWORK] The host '{old_host}' disconnected.", flush=True)
+            await self.remove_dead_node(old_host)
+        
+        print(f"[NETWORK] You are the new HOST by succession!", flush=True)
+        
+        self.is_host = True
+        self.host_id = request.new_host_id
+        self.host_ip = request.new_host_ip
+        self.host_port = request.new_host_port
+        
+        from network import discovery
+        asyncio.create_task(discovery.run_discovery_server(self.player_id, self.port))
+        return game_pb2.ActionResponse(success=True, status_message="You are now the host.")
+    
 async def monitor_heartbeats(servicer, interval=5, max_misses=3):
     from network import grpc_client
+    from network import discovery
+
+    async def ping_client_node(node_id, info):
+        res = await grpc_client.send_ping(info['ip'], info['port'], servicer.player_id)
+        
+        is_dead = False 
+        async with servicer.missed_pings_lock:
+            if res and res.success:
+                servicer.missed_pings[node_id] = 0
+            else:
+                current_misses = servicer.missed_pings.get(node_id, 0) + 1
+                servicer.missed_pings[node_id] = current_misses
+                if current_misses >= max_misses:
+                    is_dead = True
+
+        if is_dead:
+            print(f"\n[NETWORK] Dropped connection! '{node_id}' disconnected.", flush=True)
+            await servicer.remove_dead_node(node_id)
+            async with servicer.dht_lock:
+                remaining_nodes = list(servicer.dht_table.values())
+
+            for other_node in remaining_nodes:
+                asyncio.create_task(
+                    grpc_client.send_leave(other_node["ip"], other_node["port"], node_id)
+                )
+
     while True:
-        await asyncio.sleep(interval)
+        try:
+            await asyncio.sleep(interval)
 
-        async with servicer.dht_lock:
-            nodes_to_ping = dict(servicer.dht_table)
+            if servicer.is_host:
+                async with servicer.dht_lock:
+                    nodes_to_ping = dict(servicer.dht_table)
 
-        for node_id, info in nodes_to_ping.items():
-            res = await grpc_client.send_ping(info['ip'], info['port'], servicer.player_id)
+                tasks = []
+                for node_id, info in nodes_to_ping.items():
+                    if node_id == servicer.player_id:
+                        continue 
+                    tasks.append(ping_client_node(node_id, info))
+                
+                if tasks:
+                    await asyncio.gather(*tasks, return_exceptions=True)
+            else:
+                if not servicer.host_ip or not servicer.host_port:
+                    if servicer.lobby_nodes:
+                        next_potential = servicer.lobby_nodes[0]
+                        if next_potential != servicer.player_id and next_potential in servicer.dht_table:
+                            servicer.host_id = next_potential
+                            servicer.host_ip = servicer.dht_table[next_potential]["ip"]
+                            servicer.host_port = servicer.dht_table[next_potential]["port"]
+                            continue
+                    continue
+                    
+                res = await grpc_client.send_ping(servicer.host_ip, servicer.host_port, servicer.player_id)
 
-            async with servicer.missed_pings_lock:
-                if res and res.success:
-                    self_missed = servicer.missed_pings.get(node_id, 0)
-                    if self_missed > 0:
-                         servicer.missed_pings[node_id] = 0
-                else:
-                    current_misses = servicer.missed_pings.get(node_id, 0) + 1
-                    servicer.missed_pings[node_id] = current_misses
+                host_is_dead = False
+                async with servicer.missed_pings_lock:
+                    if res and res.success:
+                        servicer.missed_pings[servicer.host_id] = 0
+                    else:
+                        current_misses = servicer.missed_pings.get(servicer.host_id, 0) + 1
+                        servicer.missed_pings[servicer.host_id] = current_misses
 
-                    if current_misses >= max_misses:
-                        await servicer.remove_dead_node(node_id)
-                        print(f"\n[NETWORK] Dropped connection! '{node_id}' disconnected.", flush=True)
+                        if current_misses >= max_misses:
+                            host_is_dead = True
 
-                        # Propagar a remoção a todos os nós ainda vivos
+                if host_is_dead:
+                    old_host_id = servicer.host_id
+                    print(f"\n[NETWORK] The host '{old_host_id}' disconnected abruptly!", flush=True)
+                    await servicer.remove_dead_node(old_host_id)
+                    
+                    if servicer.lobby_nodes and servicer.lobby_nodes[0] == servicer.player_id:
+                        print("\n[NETWORK] You are the new HOST by succession!", flush=True)
+                        servicer.is_host = True
+                        servicer.host_id = servicer.player_id
+                        servicer.host_ip = servicer.my_ip
+                        servicer.host_port = servicer.port
+
+                        asyncio.create_task(discovery.run_discovery_server(servicer.player_id, servicer.port))
+
                         async with servicer.dht_lock:
-                            remaining_nodes = list(servicer.dht_table.values())
-
-                        for other_node in remaining_nodes:
+                            remaining_nodes = list(servicer.dht_table.items())
+                            
+                        for nid, info in remaining_nodes:
                             asyncio.create_task(
-                                grpc_client.send_leave(
-                                    other_node["ip"],
-                                    other_node["port"],
-                                    node_id  # player_id do nó que morreu
+                                grpc_client.send_host_disconnected(
+                                    info["ip"], info["port"],
+                                    old_host_id,
+                                    servicer.player_id,
+                                    servicer.my_ip,
+                                    servicer.port,
+                                    {k: v for k, v in servicer.dht_table.items()}
                                 )
                             )
-
+                    else:
+                        if servicer.lobby_nodes:
+                            next_host_id = servicer.lobby_nodes[0]
+                            if next_host_id in servicer.dht_table:
+                                servicer.host_id = next_host_id
+                                servicer.host_ip = servicer.dht_table[next_host_id]["ip"]
+                                servicer.host_port = servicer.dht_table[next_host_id]["port"]
+                                print(f"[NETWORK] Waiting for succession. Next expected host: '{next_host_id}'", flush=True)
+                            else:
+                                servicer.host_id = None; servicer.host_ip = None; servicer.host_port = None
+                        else:
+                            servicer.host_id = None; servicer.host_ip = None; servicer.host_port = None
+                            
+        except asyncio.CancelledError:
+            break
+        except Exception:
+            pass
 
 async def start_grpc_server(player_id, my_ip):
     server = grpc.aio.server()
