@@ -143,8 +143,8 @@ class GameNodeServicer(game_pb2_grpc.GameNodeServicer):
         
         from network import discovery
         asyncio.create_task(discovery.run_discovery_server(self.player_id, self.port))
-        
         return game_pb2.ActionResponse(success=True, status_message="You are now the host.")
+    
 async def monitor_heartbeats(servicer, interval=5, max_misses=3):
     from network import grpc_client
     from network import discovery
